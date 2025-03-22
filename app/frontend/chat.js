@@ -1,44 +1,151 @@
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Send } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+
 export default function ChatScreen() {
+  const [messages, setMessages] = useState([
+    {
+      id: '1',
+      sender: 'bot',
+      text: "Hello, I'm here to support you. Everything we discuss is completely confidential. How can I help you today?"
+    }
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollViewRef = useRef();
+  const socketRef = useRef(null);
+
+  useEffect(() => {
+    // Initialize WebSocket connection
+    socketRef.current = new WebSocket('ws://localhost:3000/chat');
+    
+    socketRef.current.onopen = () => {
+      console.log('WebSocket connection established');
+    };
+    
+    socketRef.current.onmessage = (event) => {
+      const response = JSON.parse(event.data);
+      
+      if (response.type === 'ai_response') {
+        setMessages(prevMessages => [
+          ...prevMessages,
+          { id: Date.now().toString(), sender: 'bot', text: response.message }
+        ]);
+        setIsLoading(false);
+      }
+    };
+    
+    socketRef.current.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setIsLoading(false);
+    };
+    
+    socketRef.current.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
+    
+    // Clean up on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
+    };
+  }, []);
+
+  const sendMessage = () => {
+    if (inputText.trim() === '') return;
+    
+    // Add user message to chat
+    const newMessage = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: inputText.trim()
+    };
+    
+    setMessages(prevMessages => [...prevMessages, newMessage]);
+    setIsLoading(true);
+    
+    // Send message to server via WebSocket
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: 'user_message',
+        message: inputText.trim()
+      }));
+    } else {
+      console.error('WebSocket not connected');
+      setIsLoading(false);
+    }
+    
+    setInputText('');
+  };
+
   return (
     <LinearGradient
-    colors={['#c5cae9','#e1bee7','#ffcdd2']}
-    style={styles.container}
-    start={{x:1,y:0.5}}
-    end={{x:0.5,y:0}}
+      colors={['#c5cae9', '#e1bee7', '#ffcdd2']}
+      style={styles.container}
+      start={{x: 1, y: 0.5}}
+      end={{x: 0.5, y: 0}}
     >
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>AI Support Chat</Text>
-        <Text style={styles.subtitle}>Confidential 24/7 support</Text>
-      </View>
-     
-
-      <ScrollView style={styles.chatContainer}>
-        <View style={styles.messageContainer}>
-          <Text style={styles.botName}>SafeHaven AI</Text>
-          <View style={styles.botMessage}>
-            <Text style={styles.messageText}>
-              Hello, I'm here to support you. Everything we discuss is completely confidential. How can I help you today?
-            </Text>
-          </View>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>AI Support Chat</Text>
+          <Text style={styles.subtitle}>Confidential 24/7 support</Text>
         </View>
-      </ScrollView>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Type your message..."
-          placeholderTextColor="#e64a19"
-          multiline
-        />
-        <Pressable style={styles.sendButton}>
-          <Send size={24} color="green" />
-        </Pressable>
+        
+        <ScrollView 
+          style={styles.chatContainer}
+          ref={scrollViewRef}
+          onContentSizeChange={() => scrollViewRef.current.scrollToEnd({ animated: true })}
+        >
+          {messages.map((message) => (
+            <View 
+              key={message.id} 
+              style={[
+                styles.messageContainer,
+                message.sender === 'user' && styles.userMessageContainer
+              ]}
+            >
+              <Text style={styles.botName}>
+                {message.sender === 'bot' ? 'SafeHaven AI' : 'You'}
+              </Text>
+              <View 
+                style={[
+                  styles.botMessage,
+                  message.sender === 'user' && styles.userMessage
+                ]}
+              >
+                <Text style={styles.messageText}>{message.text}</Text>
+              </View>
+            </View>
+          ))}
+          
+          {isLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="green" />
+              <Text style={styles.loadingText}>AI is thinking...</Text>
+            </View>
+          )}
+        </ScrollView>
+        
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type your message..."
+            placeholderTextColor="#e64a19"
+            multiline
+            value={inputText}
+            onChangeText={setInputText}
+          />
+          <Pressable 
+            style={styles.sendButton}
+            onPress={sendMessage}
+            disabled={inputText.trim() === '' || isLoading}
+          >
+            <Send size={24} color={inputText.trim() === '' || isLoading ? "#999" : "green"} />
+          </Pressable>
+        </View>
       </View>
-    </View>
     </LinearGradient>
   );
 }
@@ -46,7 +153,6 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    
   },
   header: {
     padding: 20,
@@ -71,6 +177,10 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     marginBottom: 20,
+    alignItems: 'flex-start',
+  },
+  userMessageContainer: {
+    alignItems: 'flex-end',
   },
   botName: {
     fontFamily: 'SpaceGrotesk-Medium',
@@ -93,6 +203,11 @@ const styles = StyleSheet.create({
     shadowRadius: 1,
     elevation: 5,
     maxWidth: '80%',
+  },
+  userMessage: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#1976D2',
+    shadowColor: '#1976D2',
   },
   messageText: {
     fontFamily: 'SpaceGrotesk-Regular',
@@ -137,9 +252,15 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
     elevation: 5,
   },
-  background:{
-    top:0,
-    left:0,
-    height:200
-  }
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    padding: 8,
+  },
+  loadingText: {
+    marginLeft: 8,
+    fontFamily: 'SpaceGrotesk-Regular',
+    color: 'green',
+  },
 });
