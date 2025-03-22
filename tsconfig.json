@@ -1,0 +1,17 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
+, "app/frontend/_layout.js", "app/frontend/chat.js", "app/frontend/index.js", "app/frontend/resources.js", "app/frontend/support.js", "app/_layout.js", "app/not-found.js"  ]
+}
+
